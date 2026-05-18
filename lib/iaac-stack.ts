@@ -17,6 +17,13 @@ export class IaacStack extends cdk.Stack {
       handler: 'newOrder',
     });
 
+    // Lambda Function
+    const getOrderFunction = new lambda.NodejsFunction(this, 'GetOrderFunction', {
+      runtime: Runtime.NODEJS_24_X,
+      entry: path.join(__dirname, 'functions/handler.ts'),
+      handler: 'getOrder',
+    });
+
     // Api Gateway Service
     const api = new apigateway.RestApi(this, 'OrderApi', {
       restApiName: 'Order CDK Service'
@@ -24,6 +31,7 @@ export class IaacStack extends cdk.Stack {
 
     const orderResource = api.root.addResource('order');
     orderResource.addMethod('POST', new apigateway.LambdaIntegration(newOrderFunction));
+    orderResource.addResource('{id}').addMethod('GET', new apigateway.LambdaIntegration(getOrderFunction));
 
     // The code that defines your stack goes here
 
