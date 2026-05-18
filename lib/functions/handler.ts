@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
+import { APIGatewayProxyEvent, APIGatewayProxyResult, SQSEvent } from 'aws-lambda'
+import { SqsEventSourceProps } from 'aws-cdk-lib/aws-lambda-event-sources';
 
 const newOrder = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const id = uuidv4();
@@ -46,5 +47,11 @@ const getOrder = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyRes
   }
 }
 
+const prepOrder = async (event: SQSEvent) => {
+  console.log('Queue test message', event);
 
-export { getOrder, newOrder };
+  return;
+}
+
+
+export { getOrder, newOrder, prepOrder };

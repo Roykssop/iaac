@@ -3,13 +3,16 @@ import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import { Queue } from 'aws-cdk-lib/aws-sqs';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 
 export class IaacStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
     const handlerPath = 'lib/functions/handler.ts';
 
+    // Sqs Queue
+    const pendingOrdersQueue = new Queue(this, 'PendingOrdersQueue', {});
 
     // Lambda Function
     const newOrderFunction = new lambda.NodejsFunction(this, 'NewOrderFunction', {
@@ -24,6 +27,19 @@ export class IaacStack extends cdk.Stack {
       entry: handlerPath,
       handler: 'getOrder',
     });
+
+    // Lambda Function
+    const prepOrderFunction = new lambda.NodejsFunction(this, 'PrepOrderFunction', {
+      runtime: Runtime.NODEJS_24_X,
+      entry: handlerPath,
+      handler: 'prepOrder',
+    });
+
+    // Event Sourcing
+    prepOrderFunction.addEventSource(new SqsEventSource(pendingOrdersQueue, {
+      batchSize: 1 // Ejecuta llamada a función por cada mensaje en la queue
+    }))
+
 
     // Api Gateway Service
     const api = new apigateway.RestApi(this, 'OrderApi', {
