@@ -16,16 +16,26 @@ export class IaacStack extends cdk.Stack {
     const pendingOrdersQueue = new Queue(this, 'PendingOrdersQueue', {});
     const ordersToSendQueue = new Queue(this, 'ToSendOrdersQueue', {});
 
+    // DynamoDB
+    const ordersTable = new Table(this, 'OrdersTable', {
+      billingMode: BillingMode.PROVISIONED,
+      partitionKey: { name: 'id', type: AttributeType.STRING },
+      readCapacity: 2,
+      writeCapacity: 1
+    });
+
     // Lambda Function
     const newOrderFunction = new lambda.NodejsFunction(this, 'NewOrderFunction', {
       runtime: Runtime.NODEJS_24_X,
       entry: handlerPath,
       handler: 'newOrder',
       environment: {
-        PENDING_ORDERS_QUEUE_URL: pendingOrdersQueue.queueUrl
+        PENDING_ORDERS_QUEUE_URL: pendingOrdersQueue.queueUrl,
+        ORDERS_TABLE_NAME: ordersTable.tableName,
       }
     });
 
+    // Permissions: Granting send messages from newOrderFunction to pendingOrdersQueue
     pendingOrdersQueue.grantSendMessages(newOrderFunction)
 
     // Lambda Function
@@ -33,13 +43,19 @@ export class IaacStack extends cdk.Stack {
       runtime: Runtime.NODEJS_24_X,
       entry: handlerPath,
       handler: 'getOrder',
+      environment: {
+        ORDERS_TABLE_NAME: ordersTable.tableName,
+      }
     });
 
     // Lambda Function
     const prepOrderFunction = new lambda.NodejsFunction(this, 'PrepOrderFunction', {
       runtime: Runtime.NODEJS_24_X,
       entry: handlerPath,
-      handler: 'prepOrder'
+      handler: 'prepOrder',
+      environment: {
+        ORDERS_TABLE_NAME: ordersTable.tableName,
+      }
     });
 
     // Lambda Function
@@ -53,6 +69,7 @@ export class IaacStack extends cdk.Stack {
       }
     })
 
+    // Permissions: Granting send messages from sendOrderFunction to ordersToSendQueue
     ordersToSendQueue.grantSendMessages(sendOrderFunction);
 
     // Event Sourcing
@@ -60,13 +77,11 @@ export class IaacStack extends cdk.Stack {
       batchSize: 1 // Ejecuta llamada a función por cada mensaje en la queue
     }));
 
-    // DynamoDB
-    const ordersTable = new Table(this, 'OrdersTable', {
-      billingMode: BillingMode.PROVISIONED,
-      partitionKey: { name: 'id', type: AttributeType.STRING },
-      readCapacity: 2,
-      writeCapacity: 1
-    })
+    // Permissions: Granting data writing from newOrderFunction to ordersTable
+    ordersTable.grantWriteData(newOrderFunction);
+    ordersTable.grantWriteData(prepOrderFunction);
+    ordersTable.grantReadData(getOrderFunction);
+
 
     // Api Gateway Service
     const api = new apigateway.RestApi(this, 'OrderApi', {
