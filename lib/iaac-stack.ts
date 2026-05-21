@@ -1,11 +1,11 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import { Runtime } from 'aws-cdk-lib/aws-lambda';
+import { FilterCriteria, Runtime, StartingPosition } from 'aws-cdk-lib/aws-lambda';
 import { Construct } from 'constructs';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
-import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
-import { AttributeType, BillingMode, Table } from 'aws-cdk-lib/aws-dynamodb';
+import { DynamoEventSource, SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { AttributeType, BillingMode, StreamViewType, Table } from 'aws-cdk-lib/aws-dynamodb';
 
 export class IaacStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -21,7 +21,8 @@ export class IaacStack extends cdk.Stack {
       billingMode: BillingMode.PROVISIONED,
       partitionKey: { name: 'id', type: AttributeType.STRING },
       readCapacity: 2,
-      writeCapacity: 1
+      writeCapacity: 1,
+      stream: StreamViewType.NEW_AND_OLD_IMAGES
     });
 
     // Lambda Function
@@ -69,6 +70,25 @@ export class IaacStack extends cdk.Stack {
       }
     })
 
+    // Event Source Stream
+    sendOrderFunction.addEventSource(new DynamoEventSource(ordersTable, {
+      startingPosition: StartingPosition.LATEST,
+      batchSize: 1,
+      filters: [
+        FilterCriteria.filter({
+          eventName: ['MODIFY'],
+          dynamodb: {
+            OldImage: {
+              status: { S: ['PENDIENTE'] }
+            },
+            NewImage: {
+              status: { S: ['PREPARADO'] }
+            }
+          }
+        })
+      ]
+    }));
+
     // Permissions: Granting send messages from sendOrderFunction to ordersToSendQueue
     ordersToSendQueue.grantSendMessages(sendOrderFunction);
 
@@ -81,6 +101,7 @@ export class IaacStack extends cdk.Stack {
     ordersTable.grantWriteData(newOrderFunction);
     ordersTable.grantWriteData(prepOrderFunction);
     ordersTable.grantReadData(getOrderFunction);
+    ordersTable.grantStreamRead(sendOrderFunction);
 
 
     // Api Gateway Service

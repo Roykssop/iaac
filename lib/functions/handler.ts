@@ -92,14 +92,30 @@ const prepOrder = async (event: SQSEvent) => {
 }
 
 const sendOrder = async (event) => {
+  console.log(event);
 
-  const order = {
-    orderId: event.orderId,
-    tipo: event.tipo,
-    precio: event.precio
+  if (event.Records[0].eventName === 'MODIFY') {
+    const eventBody = event.Records[0].dynamodb;
+    console.log(eventBody)
+
+    const orderDetails = eventBody.NewImage;
+    try {
+      const order: Order = {
+        id: orderDetails.id.S,
+        tipo: orderDetails.tipo.S,
+        precio: Number(orderDetails.precio.N),
+        clienteId: orderDetails.clienteId.S,
+        status: orderDetails.status.S
+      }
+      console.log(order)
+
+      await sendMessageToSqs(event, process.env.ORDERS_TO_SEND_QUEUE_URL as string)
+    } catch (error) {
+      console.log("Error processing order:", error);
+      return;
+    }
   }
-  console.log(order);
-  await sendMessageToSqs(event, process.env.ORDERS_TO_SEND_QUEUE_URL as string)
+  return;
 }
 
 const sendMessageToSqs = async (message: any, queueUrl: string) => {
